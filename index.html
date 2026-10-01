@@ -577,8 +577,10 @@ function finalHint(found) {
     const first7 = found.slice(0, 7).map(w => '<b>[' + w[0] + ']</b>' + w.slice(1)).join(' - ');
     const last = found[7] || '?';
     return [
-        "Sentiero sterrato del parco dove un tempo si scavava la terra. Tra gli alberi vi attende l'ultimo Enigma - CERCATELO!",
-      
+        "Sentiero sterrato del parco dove un tempo si scavava la terra. Tra gli alberi vi attende l'ultimo Guardiano!",
+        'Unite le <b>prime lettere</b> di tutti i sigilli trovati fino ad ora: ' + first7 + '...',
+        "Per l'ultima lettera, pensate a qual è la prima lettera del sentimento e del rapporto profondo che vi unisce in questa notte? [<b>" + last[0] + '</b>' + last.slice(1).toLowerCase() + ']',
+        '<b>Qual è la parola finale di 8 lettere che si compone?</b>'
     ];
 }
 
@@ -648,6 +650,75 @@ function sealSVG(text, fs = 34) {
         '</svg>';
 }
 
+// ---------- Suono del tuono (generato dal browser, nessun file da scaricare) ----------
+// Ogni tuono è diverso: crepitio + boato sordo per i lampi vicini,
+// rimbombo lontano e in ritardo per quelli di sfondo.
+let actx = null, whiteBuf = null, brownBuf = null;
+function audioInit() {
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return;
+    if (!actx) {
+        actx = new C();
+        const len = actx.sampleRate * 6;
+        whiteBuf = actx.createBuffer(1, len, actx.sampleRate);
+        brownBuf = actx.createBuffer(1, len, actx.sampleRate);
+        const w = whiteBuf.getChannelData(0), b = brownBuf.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < len; i++) {
+            w[i] = Math.random() * 2 - 1;
+            last = (last + 0.02 * w[i]) / 1.02;
+            b[i] = last * 3.5;
+        }
+    }
+    if (actx.state === 'suspended') actx.resume();
+}
+addEventListener('pointerdown', audioInit, { once: true });
+
+function noise(buf, t, dur, rate = 1) {
+    const src = actx.createBufferSource();
+    src.buffer = buf; src.playbackRate.value = rate;
+    src.start(t, Math.random() * 1.5); src.stop(t + dur);
+    return src;
+}
+function thunderSound(faint) {
+    if (!actx || actx.state !== 'running') return;
+    const R = Math.random, t = actx.currentTime + (faint ? 0.5 + R() * 1.8 : 0.01);
+    const out = actx.createGain();
+    out.gain.value = faint ? 0.45 : 1.0;
+    out.connect(actx.destination);
+
+    // Boato che rotola
+    const len = faint ? 4 + R() * 2 : 5 + R() * 2;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(faint ? 280 : 900, t);
+    lp.frequency.exponentialRampToValueAtTime(faint ? 110 : 170, t + len);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(1, t + (faint ? 0.45 : 0.04));
+    let tt = t + (faint ? 0.8 : 0.35);
+    for (let k = 0; k < 4; k++) { g.gain.exponentialRampToValueAtTime(0.25 + R() * 0.65, tt); tt += 0.35 + R() * 0.6; }
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    noise(brownBuf, t, len + 0.1, 0.7 + R() * 0.4).connect(lp).connect(g).connect(out);
+
+    if (faint) return;
+
+    // Schiocco iniziale del fulmine
+    for (let k = 0; k < 3; k++) {
+        const ts = t + k * (0.03 + R() * 0.06);
+        const hpf = actx.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = 900 + R() * 800;
+        const cg = actx.createGain();
+        cg.gain.setValueAtTime(0.0001, ts);
+        cg.gain.exponentialRampToValueAtTime(k === 0 ? 0.9 : 0.5, ts + 0.004);
+        cg.gain.exponentialRampToValueAtTime(0.0001, ts + 0.18 + R() * 0.2);
+        noise(whiteBuf, ts, 0.5).connect(hpf).connect(cg).connect(out);
+    }
+    // Colpo sub-basso
+    const osc = actx.createOscillator(), og = actx.createGain();
+    osc.frequency.setValueAtTime(70, t); osc.frequency.exponentialRampToValueAtTime(28, t + 1.2);
+    og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.8, t + 0.02); og.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+    osc.connect(og).connect(out); osc.start(t); osc.stop(t + 1.7);
+}
+
 // ---------- Lampi ----------
 function boltPath() {
     let x = 20 + Math.random() * 60, y = -2, d = 'M' + x + ' ' + y, branch = '';
@@ -664,6 +735,7 @@ function boltPath() {
 }
 function restart(el, cls) { el.classList.remove(...cls); void el.offsetWidth; el.classList.add(...cls); }
 function strike(faint = false) {
+    thunderSound(faint);
     if (REDUCED) return;
     const [a, b] = boltPath(), paths = $('bolt').querySelectorAll('path');
     paths[0].setAttribute('d', a); paths[0].style.strokeWidth = faint ? 1.5 : 3;
@@ -811,6 +883,7 @@ async function checkAnswer() {
 
 // ---------- Inizio / ripresa ----------
 function startGame(fromSaved = false) {
+    audioInit();
     if (!fromSaved) state = { step: 0, found: [] };
     saveState();
     const bg = $('bg-music');
