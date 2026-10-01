@@ -577,10 +577,8 @@ function finalHint(found) {
     const first7 = found.slice(0, 7).map(w => '<b>[' + w[0] + ']</b>' + w.slice(1)).join(' - ');
     const last = found[7] || '?';
     return [
-        "Sentiero sterrato del parco dove un tempo si scavava la terra. Tra gli alberi vi attende l'ultimo Guardiano!",
-        'Unite le <b>prime lettere</b> di tutti i sigilli trovati fino ad ora: ' + first7 + '...',
-        "Per l'ultima lettera, pensate a qual è la prima lettera del sentimento e del rapporto profondo che vi unisce in questa notte? [<b>" + last[0] + '</b>' + last.slice(1).toLowerCase() + ']',
-        '<b>Qual è la parola finale di 8 lettere che si compone?</b>'
+        "Sentiero sterrato del parco dove un tempo si scavava la terra. Tra gli alberi vi attende l'ultimo Enigma - CERCATELO!",
+      
     ];
 }
 
